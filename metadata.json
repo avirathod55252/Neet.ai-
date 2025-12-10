@@ -1,0 +1,8 @@
+{
+  "name": "Copy of NEET.ai - Smart Prep Agent",
+  "description": "An AI-powered preparation assistant for NEET aspirants focusing on Physics, Chemistry, and Biology with high-accuracy mock tests and instant doubt solving.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
