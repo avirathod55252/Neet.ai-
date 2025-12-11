@@ -1,13 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Check, X, Trophy } from 'lucide-react';
+import { UserData } from '../types';
 
-export const CalendarWidget: React.FC = () => {
+interface CalendarWidgetProps {
+  user?: UserData; // User might be null initially or passed optionally
+}
+
+export const CalendarWidget: React.FC<CalendarWidgetProps> = ({ user }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   // Store study status: 'success' (studied), 'fail' (skipped), or undefined
   const [studyLog, setStudyLog] = useState<Record<string, 'success' | 'fail'>>({});
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
+
+  // Load progress from localStorage on mount or user change
+  useEffect(() => {
+    if (!user) return;
+
+    const loadProgress = () => {
+      const key = `neet_daily_progress_${user.email}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const history = JSON.parse(saved);
+        const newLog: Record<string, 'success' | 'fail'> = {};
+        
+        history.forEach((entry: any) => {
+          // entry.date is YYYY-MM-DD. 
+          // Our log keys need to match. The widget uses YYYY-M-D (single digit months/days no pad? let's check renderDays)
+          // renderDays uses: `${currentDate.getFullYear()}-${currentDate.getMonth()}-${day}`
+          // Let's parse entry.date
+          const [y, m, d] = entry.date.split('-').map(Number);
+          // Month is 0-indexed in JS Date, but 1-indexed in ISO string usually? 
+          // new Date().toISOString() gives 2023-10-05. Month is 10.
+          // JS getMonth() for Oct is 9. 
+          // So we need to subtract 1 from month.
+          const dateKey = `${y}-${m - 1}-${d}`;
+          newLog[dateKey] = 'success'; 
+        });
+        
+        setStudyLog(prev => ({ ...prev, ...newLog }));
+      }
+    };
+
+    loadProgress();
+    
+    // Listen for storage events to update in real-time if multiple tabs or components update it
+    window.addEventListener('storage', loadProgress);
+    return () => window.removeEventListener('storage', loadProgress);
+  }, [user]);
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -55,14 +96,14 @@ export const CalendarWidget: React.FC = () => {
             ${isExamDay 
               ? 'bg-rose-600 text-white shadow-md shadow-rose-900/30 scale-110 ring-2 ring-rose-400' 
               : status === 'success' 
-                ? 'bg-emerald-500 text-white' 
+                ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/50' 
                 : status === 'fail' 
                   ? 'bg-slate-700 text-slate-400 opacity-50' 
                   : 'text-slate-300 hover:bg-slate-800'
             }
             ${isToday && !status && !isExamDay ? 'ring-1 ring-emerald-500 text-emerald-400' : ''}
           `}
-          title={isExamDay ? "NEET EXAM DAY!" : "Click to toggle study status"}
+          title={isExamDay ? "NEET EXAM DAY!" : status === 'success' ? "Goal Achieved" : "Click to toggle"}
         >
           {status === 'success' && <Check className="w-4 h-4" />}
           {status === 'fail' && <X className="w-3 h-3" />}
@@ -106,16 +147,12 @@ export const CalendarWidget: React.FC = () => {
       <div className="mt-4 pt-3 border-t border-slate-700 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
            <Trophy className="w-3 h-3 text-yellow-500" />
-           <span className="text-slate-300">Goal: 04 May</span>
+           <span className="text-slate-300">Streak: {Object.values(studyLog).filter(s => s === 'success').length} Days</span>
         </div>
         <div className="flex gap-2">
           <div className="flex items-center gap-1">
              <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
              <span className="text-slate-500">Done</span>
-          </div>
-          <div className="flex items-center gap-1">
-             <div className="w-2 h-2 rounded-full bg-slate-600"></div>
-             <span className="text-slate-500">Miss</span>
           </div>
         </div>
       </div>

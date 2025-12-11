@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Subject, Difficulty, Question, QuizResult } from '../types';
+import { Subject, Difficulty, Question, QuizResult, UserData } from '../types';
 import { generateQuizQuestions } from '../services/geminiService';
 import { SUBJECT_TOPICS } from '../constants';
-import { AlertCircle, CheckCircle, XCircle, Timer, ArrowRight, BookOpen } from 'lucide-react';
+import { AlertCircle, CheckCircle, XCircle, Timer, ArrowRight, BookOpen, Save } from 'lucide-react';
 
-export const QuizMode: React.FC = () => {
+interface QuizModeProps {
+  user: UserData;
+}
+
+export const QuizMode: React.FC<QuizModeProps> = ({ user }) => {
   const [step, setStep] = useState<'setup' | 'quiz' | 'result'>('setup');
   const [subject, setSubject] = useState<Subject>(Subject.BIOLOGY);
   const [topic, setTopic] = useState<string>(SUBJECT_TOPICS[Subject.BIOLOGY][0]);
@@ -40,12 +44,36 @@ export const QuizMode: React.FC = () => {
     setShowExplanation(true);
   };
 
+  const saveProgress = (result: QuizResult) => {
+    try {
+      const storageKey = `neet_progress_${user.email}`;
+      const existingData = localStorage.getItem(storageKey);
+      const history = existingData ? JSON.parse(existingData) : [];
+      
+      const newRecord = {
+        date: new Date().toISOString(),
+        subject,
+        topic,
+        score: result.score,
+        total: result.totalQuestions * 4, // Max score possible
+        percentage: (result.score / (result.totalQuestions * 4)) * 100
+      };
+      
+      const updatedHistory = [...history, newRecord];
+      localStorage.setItem(storageKey, JSON.stringify(updatedHistory));
+    } catch (error) {
+      console.error("Failed to save progress", error);
+    }
+  };
+
   const handleNext = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(prev => prev + 1);
       setSelectedOption(null);
       setShowExplanation(false);
     } else {
+      const result = calculateResult();
+      saveProgress(result);
       setStep('result');
     }
   };
@@ -223,7 +251,7 @@ export const QuizMode: React.FC = () => {
                 : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg hover:shadow-emerald-200'
             }`}
           >
-            {currentIndex === questions.length - 1 ? "Finish Test" : "Next Question"}
+            {currentIndex === questions.length - 1 ? "Finish & Save" : "Next Question"}
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>
@@ -234,15 +262,14 @@ export const QuizMode: React.FC = () => {
   if (step === 'result') {
     const result = calculateResult();
     const maxScore = result.totalQuestions * 4;
-    const percentage = Math.round((result.score / maxScore) * 100);
-
+    
     return (
       <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-xl text-center">
         <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
           <Timer className="w-10 h-10 text-emerald-600" />
         </div>
         <h2 className="text-3xl font-bold text-slate-800 mb-2">Test Complete!</h2>
-        <p className="text-slate-500 mb-8">Here is how you performed</p>
+        <p className="text-slate-500 mb-8">Your results have been saved to your profile.</p>
 
         <div className="bg-slate-50 rounded-2xl p-6 mb-8">
           <div className="text-4xl font-bold text-slate-900 mb-1">{result.score} <span className="text-lg text-slate-400 font-normal">/ {maxScore}</span></div>

@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { generateDailyQuestions } from '../services/geminiService';
-import { Question } from '../types';
-import { Zap, CheckCircle, XCircle, RefreshCw, ChevronDown, ChevronUp, AlertCircle, ArrowRight } from 'lucide-react';
+import { Question, UserData } from '../types';
+import { Zap, CheckCircle, XCircle, RefreshCw, AlertCircle, Trophy, Star } from 'lucide-react';
 
-export const DailyChallenge: React.FC = () => {
+interface DailyChallengeProps {
+  user: UserData;
+}
+
+export const DailyChallenge: React.FC<DailyChallengeProps> = ({ user }) => {
   const [questions, setQuestions] = useState<(Question & { subject: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
@@ -27,15 +31,53 @@ export const DailyChallenge: React.FC = () => {
     fetchQuestions();
   }, []);
 
-  const handleAnswer = (qId: number, optionIdx: number) => {
-    if (selectedAnswers[qId] !== undefined) return;
-    setSelectedAnswers(prev => ({ ...prev, [qId]: optionIdx }));
-    setExpandedId(qId); // Auto expand to show explanation
+  const saveProgress = (newAnswers: Record<number, number>) => {
+    if (questions.length === 0) return;
+    
+    // Calculate current score based on how many correct answers in newAnswers state
+    let correctCount = 0;
+    questions.forEach(q => {
+      if (newAnswers[q.id] === q.correctOptionIndex) {
+        correctCount++;
+      }
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const key = `neet_daily_progress_${user.email}`;
+    const existing = localStorage.getItem(key);
+    let history = existing ? JSON.parse(existing) : [];
+
+    // Remove today's entry if it exists to overwrite it
+    history = history.filter((h: any) => h.date !== today);
+
+    // Save with answered count to determine completion status easily
+    history.push({
+      date: today,
+      score: correctCount,
+      total: questions.length,
+      answeredCount: Object.keys(newAnswers).length
+    });
+
+    localStorage.setItem(key, JSON.stringify(history));
+    
+    // Trigger storage event for cross-component updates
+    window.dispatchEvent(new Event('storage'));
   };
 
-  const toggleExpand = (qId: number) => {
-    setExpandedId(expandedId === qId ? null : qId);
+  const handleAnswer = (qId: number, optionIdx: number) => {
+    if (selectedAnswers[qId] !== undefined) return;
+    
+    const nextAnswers = { ...selectedAnswers, [qId]: optionIdx };
+    setSelectedAnswers(nextAnswers);
+    setExpandedId(qId); // Auto expand to show explanation
+    
+    saveProgress(nextAnswers);
   };
+
+  const isCompleted = questions.length > 0 && Object.keys(selectedAnswers).length === questions.length;
+  const score = questions.reduce((acc, q) => {
+    return acc + (selectedAnswers[q.id] === q.correctOptionIndex ? 1 : 0);
+  }, 0);
 
   if (loading) {
     return (
@@ -49,31 +91,44 @@ export const DailyChallenge: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-8 rounded-2xl shadow-lg text-white flex justify-between items-center">
-        <div>
+      
+      {/* Header Banner */}
+      <div className={`p-8 rounded-2xl shadow-lg text-white flex flex-col md:flex-row justify-between items-center transition-all duration-500 ${
+        isCompleted ? 'bg-gradient-to-r from-emerald-600 to-teal-600' : 'bg-gradient-to-r from-slate-900 to-slate-800'
+      }`}>
+        <div className="mb-4 md:mb-0">
            <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
-             <Zap className="w-6 h-6 text-yellow-400 fill-yellow-400" />
-             Daily Power Trio
+             {isCompleted ? <Trophy className="w-7 h-7 text-yellow-300" /> : <Zap className="w-6 h-6 text-yellow-400 fill-yellow-400" />}
+             {isCompleted ? "Challenge Complete!" : "Daily Power Trio"}
            </h2>
-           <p className="text-slate-300">Complete these 3 questions to maintain your streak!</p>
+           <p className="text-slate-100 opacity-90">
+             {isCompleted 
+               ? `You scored ${score}/3 today. Keep up the consistency!` 
+               : "Complete these 3 questions to maintain your streak!"
+             }
+           </p>
         </div>
-        <button 
-          onClick={fetchQuestions}
-          className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" /> Load New Set
-        </button>
+        
+        {isCompleted ? (
+           <div className="flex items-center gap-3 bg-white/20 px-4 py-2 rounded-xl backdrop-blur-sm">
+              <Star className="w-5 h-5 text-yellow-300 fill-yellow-300" />
+              <span className="font-bold">Streak Saved</span>
+           </div>
+        ) : (
+          <button 
+            onClick={fetchQuestions}
+            className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> Load New Set
+          </button>
+        )}
       </div>
 
       <div className="space-y-6">
-        {questions.map((q, index) => {
+        {questions.map((q) => {
           const isAnswered = selectedAnswers[q.id] !== undefined;
           const isCorrect = selectedAnswers[q.id] === q.correctOptionIndex;
           
-          const subjectTheme = 
-            q.subject.toLowerCase().includes('physics') ? 'indigo' :
-            q.subject.toLowerCase().includes('chemistry') ? 'orange' : 'emerald';
-
           const getThemeClasses = (type: 'bg' | 'text' | 'border') => {
              const map: any = {
                physics: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-100' },

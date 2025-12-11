@@ -1,3 +1,4 @@
+
 export enum Subject {
   PHYSICS = 'Physics',
   CHEMISTRY = 'Chemistry',
@@ -32,4 +33,10 @@ export interface QuizResult {
   correctAnswers: number;
   wrongAnswers: number;
   score: number; // NEET scoring: +4 for correct, -1 for wrong
+}
+
+export interface UserData {
+  name: string;
+  email: string;
+  role: string;
 }
